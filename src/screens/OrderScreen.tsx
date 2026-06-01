@@ -34,8 +34,7 @@ export default function OrderScreen() {
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [currentOrderStatus, setCurrentOrderStatus] = useState<string | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
-  const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
   useEffect(() => {
     if (paramTableId) setTable(paramTableId, paramTableName);
@@ -70,8 +69,6 @@ export default function OrderScreen() {
         if (mounted) {
             setCurrentOrderId(order.id);
             setCurrentOrderStatus(order.status);
-            setCurrentOrderNumber(order.order_number ?? null);
-          if (order.table_id) setTable(order.table_id, paramTableName);
         }
 
         const { data: itemsData, error: itemsError } = await supabase
@@ -123,7 +120,7 @@ export default function OrderScreen() {
       }
     }
     fetchCats();
-    return () => (mounted = false);
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -154,7 +151,7 @@ export default function OrderScreen() {
       }
     }
     fetchItems();
-    return () => (mounted = false);
+    return () => { mounted = false; };
   }, [selectedCategory]);
 
   async function fetchHeldOrders(tableId: number | string) {
@@ -195,7 +192,7 @@ export default function OrderScreen() {
       if (!orderId) {
         const { data: existing, error: existingErr } = await supabase
           .from('orders')
-          .select('id,status,order_number')
+          .select('id,status')
           .eq('table_id', tableId)
           .in('status', ['open', 'held'])
           .order('created_at', { ascending: false })
@@ -204,7 +201,6 @@ export default function OrderScreen() {
         if (existingErr) throw existingErr;
         if (existing && existing.id) {
           orderId = existing.id;
-          setCurrentOrderNumber(existing.order_number ?? null);
         }
       }
       let orderData: any = null;
@@ -223,7 +219,6 @@ export default function OrderScreen() {
       orderId = orderData.id;
       setCurrentOrderId(orderId);
       setCurrentOrderStatus(orderPayload.status);
-      setCurrentOrderNumber(orderData.order_number ?? null);
       if (hold) {
         setHeldOrderId(orderId);
       } else {
@@ -277,9 +272,7 @@ export default function OrderScreen() {
       <Text style={styles.header}>Order</Text>
       <Text style={styles.subheader}>Table: {paramTableName ?? paramTableId ?? 'None'}</Text>
       {currentOrderId ? (
-        <Text style={styles.orderInfo}>
-          {currentOrderNumber ? `Order #${currentOrderNumber}` : `Order: ${currentOrderId.slice(0, 8)}`} — {currentOrderStatus ?? 'open'}
-        </Text>
+        <Text style={styles.orderInfo}>Order: {currentOrderId.slice(0, 8)} — {currentOrderStatus ?? 'open'}</Text>
       ) : (
         <Text style={styles.orderInfo}>New order: press Save or Save & Hold to create</Text>
       )}
@@ -371,7 +364,6 @@ export default function OrderScreen() {
                     if (error) throw error;
                     setCurrentOrderId(null);
                     setCurrentOrderStatus(null);
-                    setCurrentOrderNumber(null);
                     clear();
                     await fetchHeldOrders(paramTableId || useOrderStore.getState().tableId || '');
                     Alert.alert('Order cancelled');
@@ -383,7 +375,7 @@ export default function OrderScreen() {
             </TouchableOpacity>
           ) : null}
           {currentOrderId ? (
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#42A5F5' }]} onPress={() => navigation.navigate('Billing' as never, { orderId: currentOrderId } as never)}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#42A5F5' }]} onPress={() => navigation.navigate('Billing', { orderId: currentOrderId })}>
               <Text style={{ color: '#fff' }}>Generate Bill</Text>
             </TouchableOpacity>
           ) : null}
@@ -422,6 +414,6 @@ const styles = StyleSheet.create({
   cartRow: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: '#fff', borderRadius: 6, marginBottom: 6 },
   qtyBtn: { padding: 6, backgroundColor: '#eee', borderRadius: 4 },
   totals: { marginTop: 8, alignItems: 'flex-end' },
-  actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  actionBtn: { padding: 10, borderRadius: 6, minWidth: 90, alignItems: 'center' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', marginTop: 8, gap: 6 },
+  actionBtn: { padding: 10, borderRadius: 6, minWidth: 80, alignItems: 'center', flex: 0.45 },
 });

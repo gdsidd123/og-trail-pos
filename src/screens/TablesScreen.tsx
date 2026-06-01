@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '../services/supabaseClient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 type Table = { id: number; name?: string; capacity?: number | null; location?: string | null; status?: string; activeOrderId?: string };
 
@@ -11,58 +11,64 @@ export default function TablesScreen() {
   const [error, setError] = useState<string | null>(null);
   const navigation = useNavigation();
 
-  useEffect(() => {
-    let mounted = true;
-    async function fetchTables() {
-      setLoading(true);
-      setError(null);
-      try {
-        // select only columns that exist in the current schema
-        const { data: tablesData, error: tablesError } = await supabase.from('tables').select('id, name, capacity, location').order('id');
-        if (tablesError) throw tablesError;
-        const tablesList = (tablesData as Table[]) || [];
+  async function fetchTables() {
+    setLoading(true);
+    setError(null);
+    try {
+      // select only columns that exist in the current schema
+      const { data: tablesData, error: tablesError } = await supabase.from('tables').select('id, name, capacity, location').order('id');
+      if (tablesError) throw tablesError;
+      const tablesList = (tablesData as Table[]) || [];
 
-        // Derive table status from any active open/held orders for that table.
-        const tableIds = tablesList.map((t) => t.id);
-        let orders = [] as any[];
-        if (tableIds.length > 0) {
-          const { data: ordersData, error: ordersError } = await supabase
-            .from('orders')
-            .select('id, table_id, status, created_at')
-            .in('table_id', tableIds)
-            .in('status', ['open', 'held'])
-            .order('created_at', { ascending: false });
-          if (!ordersError && Array.isArray(ordersData)) orders = ordersData;
-        }
-
-        const latestOpenByTable: Record<string, any> = {};
-        const latestHeldByTable: Record<string, any> = {};
-        for (const o of orders) {
-          if (o.status === 'open' && !latestOpenByTable[o.table_id]) {
-            latestOpenByTable[o.table_id] = o;
-          }
-          if (o.status === 'held' && !latestHeldByTable[o.table_id]) {
-            latestHeldByTable[o.table_id] = o;
-          }
-        }
-
-        const tablesWithStatus = tablesList.map((t) => {
-          const activeOrder = latestOpenByTable[t.id] ?? latestHeldByTable[t.id];
-          return {
-            ...t,
-            status: activeOrder?.status ?? 'available',
-            activeOrderId: activeOrder?.id,
-          };
-        });
-        if (mounted) setTables(tablesWithStatus);
-      } catch (err: any) {
-        if (mounted) setError(err.message || 'Failed to load tables');
-      } finally {
-        if (mounted) setLoading(false);
+      // Derive table status from any active open/held orders for that table.
+      const tableIds = tablesList.map((t) => t.id);
+      let orders = [] as any[];
+      if (tableIds.length > 0) {
+        const { data: ordersData, error: ordersError } = await supabase
+          .from('orders')
+          .select('id, table_id, status, created_at')
+          .in('table_id', tableIds)
+          .in('status', ['open', 'held'])
+          .order('created_at', { ascending: false });
+        if (!ordersError && Array.isArray(ordersData)) orders = ordersData;
       }
+
+      const latestOpenByTable: Record<string, any> = {};
+      const latestHeldByTable: Record<string, any> = {};
+      for (const o of orders) {
+        if (o.status === 'open' && !latestOpenByTable[o.table_id]) {
+          latestOpenByTable[o.table_id] = o;
+        }
+        if (o.status === 'held' && !latestHeldByTable[o.table_id]) {
+          latestHeldByTable[o.table_id] = o;
+        }
+      }
+
+      const tablesWithStatus = tablesList.map((t) => {
+        const activeOrder = latestOpenByTable[t.id] ?? latestHeldByTable[t.id];
+        return {
+          ...t,
+          status: activeOrder?.status ?? 'available',
+          activeOrderId: activeOrder?.id,
+        };
+      });
+      setTables(tablesWithStatus);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load tables');
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchTables();
+    }, [])
+  );
+
+  useEffect(() => {
+    // Initial load on mount
     fetchTables();
-    return () => (mounted = false);
   }, []);
 
   function statusBadge(status?: string) {
