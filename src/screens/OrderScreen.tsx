@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
 import { useOrderStore } from '../stores/orderStore';
 
-type RouteParams = { tableId?: number | string; tableName?: string };
+type RouteParams = { tableId?: number | string; tableName?: string; orderId?: string };
 type Category = { id: number; name: string };
 type MenuItem = { id: number; name: string; price: number; category_id?: number };
 
 export default function OrderScreen() {
   const route = useRoute();
   const params = (route.params || {}) as RouteParams;
-  const { tableId: paramTableId, tableName: paramTableName } = params;
+  const { tableId: paramTableId, tableName: paramTableName, orderId: paramOrderId } = params;
 
   const setTable = useOrderStore((s) => s.setTable);
   const items = useOrderStore((s) => s.items);
@@ -31,10 +31,81 @@ export default function OrderScreen() {
   const [error, setError] = useState<string | null>(null);
   const [heldOrders, setHeldOrders] = useState<any[] | null>(null);
   const [loadingHeld, setLoadingHeld] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [currentOrderStatus, setCurrentOrderStatus] = useState<string | null>(null);
+  const [loadingOrder, setLoadingOrder] = useState(false);
+  const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (paramTableId) setTable(paramTableId, paramTableName);
   }, [paramTableId, paramTableName]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchExistingOrder() {
+      if (!paramOrderId) {
+        if (paramTableId) {
+          if (mounted) {
+            setCurrentOrderId(null);
+            setCurrentOrderStatus(null);
+          }
+          return;
+        }
+        if (mounted) {
+          setCurrentOrderId(null);
+          setCurrentOrderStatus(null);
+          setHeldOrderId(null);
+          clear();
+        }
+        return;
+      }
+      setLoadingOrder(true);
+      setError(null);
+      try {
+        const { data: order, error: orderError } = await supabase.from('orders').select('*').eq('id', paramOrderId).single();
+        if (orderError) throw orderError;
+        if (!order) throw new Error('Order not found');
+
+        if (mounted) {
+            setCurrentOrderId(order.id);
+            setCurrentOrderStatus(order.status);
+            setCurrentOrderNumber(order.order_number ?? null);
+          if (order.table_id) setTable(order.table_id, paramTableName);
+        }
+
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('order_items')
+          .select('id, order_id, menu_item_id, name, unit_price, quantity')
+          .eq('order_id', order.id);
+        if (itemsError) throw itemsError;
+
+        if (mounted) {
+          const store = useOrderStore.getState();
+          store.clear();
+          if (order.table_id) store.setTable(order.table_id, paramTableName);
+          (itemsData as any[]).forEach((it) => {
+            for (let i = 0; i < it.quantity; i++) {
+              store.addItem({ id: it.menu_item_id, name: it.name, price: Number(it.unit_price) });
+            }
+          });
+          if (order.status === 'held') {
+            setHeldOrderId(order.id);
+          } else {
+            setHeldOrderId(null);
+          }
+        }
+      } catch (err: any) {
+        if (mounted) setError(err.message || 'Failed to load order');
+      } finally {
+        if (mounted) setLoadingOrder(false);
+      }
+    }
+    fetchExistingOrder();
+    return () => {
+      mounted = false;
+    };
+  }, [paramOrderId, paramTableName, setTable, setHeldOrderId, clear]);
 
   useEffect(() => {
     let mounted = true;
@@ -114,26 +185,61 @@ export default function OrderScreen() {
     if (stateItems.length === 0) return Alert.alert('Cart is empty');
 
     try {
-      // create order
       const orderPayload: any = {
         table_id: tableId,
         status: hold ? 'held' : 'open',
         subtotal: subtotal(),
       };
-      const { data: orderData, error: orderError } = await supabase.from('orders').insert(orderPayload).select().limit(1).single();
-      if (orderError) throw orderError;
-      const orderId = orderData?.id;
-      // insert order items
-      const itemsPayload = stateItems.map((it) => ({ order_id: orderId, menu_item_id: it.id, name: it.name, unit_price: it.price, quantity: it.quantity }));
-      const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload);
-      if (itemsError) throw itemsError;
+      let orderId = currentOrderId;
+      // If no current order, ensure there is no other active order for this table (open/held).
+      if (!orderId) {
+        const { data: existing, error: existingErr } = await supabase
+          .from('orders')
+          .select('id,status,order_number')
+          .eq('table_id', tableId)
+          .in('status', ['open', 'held'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingErr) throw existingErr;
+        if (existing && existing.id) {
+          orderId = existing.id;
+          setCurrentOrderNumber(existing.order_number ?? null);
+        }
+      }
+      let orderData: any = null;
+
+      if (orderId) {
+        const { data, error } = await supabase.from('orders').update(orderPayload).eq('id', orderId).select().single();
+        if (error) throw error;
+        orderData = data;
+      } else {
+        const { data, error } = await supabase.from('orders').insert(orderPayload).select().limit(1).single();
+        if (error) throw error;
+        orderData = data;
+      }
+
+      if (!orderData?.id) throw new Error('Failed to save order');
+      orderId = orderData.id;
+      setCurrentOrderId(orderId);
+      setCurrentOrderStatus(orderPayload.status);
+      setCurrentOrderNumber(orderData.order_number ?? null);
       if (hold) {
         setHeldOrderId(orderId);
-        Alert.alert('Order held');
       } else {
-        clear();
-        Alert.alert('Order saved');
+        setHeldOrderId(null);
       }
+
+      const itemsPayload = stateItems.map((it) => ({ order_id: orderId, menu_item_id: it.id, name: it.name, unit_price: it.price, quantity: it.quantity }));
+      if (currentOrderId) {
+        const { error: deleteError } = await supabase.from('order_items').delete().eq('order_id', orderId);
+        if (deleteError) throw deleteError;
+      }
+      const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload);
+      if (itemsError) throw itemsError;
+
+      Alert.alert(hold ? 'Order held' : 'Order saved');
+      await fetchHeldOrders(tableId);
     } catch (err: any) {
       Alert.alert('Save failed', err.message || String(err));
     }
@@ -145,19 +251,19 @@ export default function OrderScreen() {
       const { data, error } = await supabase.from('order_items').select('id, order_id, menu_item_id, name, unit_price, quantity').eq('order_id', order.id);
       if (error) throw error;
       const items = (data as any[]).map((it) => ({ id: it.menu_item_id, name: it.name, price: Number(it.unit_price), quantity: it.quantity }));
-      // set store
       clear();
       if (order.table_id) setTable(order.table_id, String(order.table_id));
-      items.forEach((it) => useOrderStore.getState().addItem({ id: it.id, name: it.name, price: it.price }));
-      // now set quantities properly
       const store = useOrderStore.getState();
-      // replace quantities
-      store.clear();
-      store.setTable(order.table_id, String(order.table_id));
       items.forEach((it) => {
         for (let i = 0; i < it.quantity; i++) store.addItem({ id: it.id, name: it.name, price: it.price });
       });
-      setHeldOrderId(order.id);
+      setCurrentOrderId(order.id);
+      setCurrentOrderStatus(order.status);
+      if (order.status === 'held') {
+        setHeldOrderId(order.id);
+      } else {
+        setHeldOrderId(null);
+      }
       Alert.alert('Resumed order');
     } catch (err: any) {
       Alert.alert('Resume failed', err.message || String(err));
@@ -170,6 +276,13 @@ export default function OrderScreen() {
     <View style={styles.container}>
       <Text style={styles.header}>Order</Text>
       <Text style={styles.subheader}>Table: {paramTableName ?? paramTableId ?? 'None'}</Text>
+      {currentOrderId ? (
+        <Text style={styles.orderInfo}>
+          {currentOrderNumber ? `Order #${currentOrderNumber}` : `Order: ${currentOrderId.slice(0, 8)}`} — {currentOrderStatus ?? 'open'}
+        </Text>
+      ) : (
+        <Text style={styles.orderInfo}>New order: press Save or Save & Hold to create</Text>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Categories</Text>
@@ -247,6 +360,33 @@ export default function OrderScreen() {
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#E0E0E0' }]} onPress={() => fetchHeldOrders(paramTableId || useOrderStore.getState().tableId || '')}>
             <Text>Refresh Held</Text>
           </TouchableOpacity>
+          {currentOrderId ? (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F06292' }]} onPress={async () => {
+              // soft delete
+              Alert.alert('Confirm', 'Cancel this order? (mark as cancelled)', [
+                { text: 'No', style: 'cancel' },
+                { text: 'Yes', onPress: async () => {
+                  try {
+                    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', currentOrderId);
+                    if (error) throw error;
+                    setCurrentOrderId(null);
+                    setCurrentOrderStatus(null);
+                    setCurrentOrderNumber(null);
+                    clear();
+                    await fetchHeldOrders(paramTableId || useOrderStore.getState().tableId || '');
+                    Alert.alert('Order cancelled');
+                  } catch (e:any) { Alert.alert('Failed', e.message || String(e)); }
+                } }
+              ]);
+            }}>
+              <Text style={{ color: '#fff' }}>Delete</Text>
+            </TouchableOpacity>
+          ) : null}
+          {currentOrderId ? (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#42A5F5' }]} onPress={() => navigation.navigate('Billing' as never, { orderId: currentOrderId } as never)}>
+              <Text style={{ color: '#fff' }}>Generate Bill</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={{ marginTop: 8 }}>
@@ -268,6 +408,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 12, backgroundColor: '#FAF9F6' },
   header: { fontSize: 20, fontWeight: '700' },
   subheader: { color: '#666', marginBottom: 8 },
+  orderInfo: { color: '#333', marginBottom: 8, fontSize: 12 },
   section: { marginVertical: 8 },
   sectionTitle: { fontWeight: '700', marginBottom: 6 },
   catButton: { padding: 8, backgroundColor: '#fff', borderRadius: 6, marginRight: 8 },

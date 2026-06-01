@@ -6,6 +6,7 @@ import TablesScreen from '../screens/TablesScreen';
 import OrderScreen from '../screens/OrderScreen';
 import MenuManagementScreen from '../screens/MenuManagementScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import BillingScreen from '../screens/BillingScreen';
 import { SAGE_GREEN, OFF_WHITE, BLACK } from '../constants';
 import { Text } from 'react-native';
 
@@ -37,6 +38,7 @@ export default function RootNavigator() {
         <Tab.Screen name="Tables" component={TablesScreen} />
         <Tab.Screen name="Order" component={OrderScreen} />
         <Tab.Screen name="Menu" component={MenuManagementScreen} options={{ title: 'Menu' }} />
+        <Tab.Screen name="Billing" component={BillingScreen} options={{ title: 'Billing' }} />
         <Tab.Screen name="Settings" component={SettingsScreen} />
       </Tab.Navigator>
     </NavigationContainer>

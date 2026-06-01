@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator }
 import { supabase } from '../services/supabaseClient';
 import { useNavigation } from '@react-navigation/native';
 
-type Table = { id: number; name?: string; capacity?: number | null; location?: string | null; status?: string };
+type Table = { id: number; name?: string; capacity?: number | null; location?: string | null; status?: string; activeOrderId?: string };
 
 export default function TablesScreen() {
   const [tables, setTables] = useState<Table[] | null>(null);
@@ -22,8 +22,7 @@ export default function TablesScreen() {
         if (tablesError) throw tablesError;
         const tablesList = (tablesData as Table[]) || [];
 
-        // Derive table status from any active orders for that table instead of relying on a stored `status` column.
-        // Fetch recent orders for these tables where status is likely 'active' (not completed/closed).
+        // Derive table status from any active open/held orders for that table.
         const tableIds = tablesList.map((t) => t.id);
         let orders = [] as any[];
         if (tableIds.length > 0) {
@@ -31,18 +30,30 @@ export default function TablesScreen() {
             .from('orders')
             .select('id, table_id, status, created_at')
             .in('table_id', tableIds)
+            .in('status', ['open', 'held'])
             .order('created_at', { ascending: false });
           if (!ordersError && Array.isArray(ordersData)) orders = ordersData;
         }
 
-        // Build a map of latest order per table (orders are already newest-first)
-        const latestByTable: Record<string, any> = {};
+        const latestOpenByTable: Record<string, any> = {};
+        const latestHeldByTable: Record<string, any> = {};
         for (const o of orders) {
-          if (!latestByTable[o.table_id]) latestByTable[o.table_id] = o;
+          if (o.status === 'open' && !latestOpenByTable[o.table_id]) {
+            latestOpenByTable[o.table_id] = o;
+          }
+          if (o.status === 'held' && !latestHeldByTable[o.table_id]) {
+            latestHeldByTable[o.table_id] = o;
+          }
         }
 
-        // Attach derived status to each table
-        const tablesWithStatus = tablesList.map((t) => ({ ...t, status: latestByTable[t.id]?.status ?? 'available' }));
+        const tablesWithStatus = tablesList.map((t) => {
+          const activeOrder = latestOpenByTable[t.id] ?? latestHeldByTable[t.id];
+          return {
+            ...t,
+            status: activeOrder?.status ?? 'available',
+            activeOrderId: activeOrder?.id,
+          };
+        });
         if (mounted) setTables(tablesWithStatus);
       } catch (err: any) {
         if (mounted) setError(err.message || 'Failed to load tables');
@@ -56,6 +67,7 @@ export default function TablesScreen() {
 
   function statusBadge(status?: string) {
     switch ((status || 'available').toLowerCase()) {
+      case 'open':
       case 'occupied':
         return <Text style={[styles.badge, { backgroundColor: '#E57373' }]}>Occupied</Text>;
       case 'held':
@@ -81,11 +93,16 @@ export default function TablesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.navigate('Order' as never, { tableId: item.id, tableName: item.name } as never)}
+            onPress={() => navigation.navigate('Order' as never, { tableId: item.id, tableName: item.name, orderId: item.activeOrderId } as never)}
           >
             <View>
               <Text style={styles.tableName}>{item.name ?? `Table ${item.id}`}</Text>
               <Text style={styles.tableId}>#{item.id}</Text>
+              {item.activeOrderId ? (
+                <Text style={styles.tableMeta}>Order {item.activeOrderId.slice(0, 8)} — {item.status}</Text>
+              ) : (
+                <Text style={styles.tableMeta}>No active order</Text>
+              )}
             </View>
             {statusBadge(item.status)}
           </TouchableOpacity>
@@ -104,5 +121,6 @@ const styles = StyleSheet.create({
   tableId: { color: '#666' },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, color: '#000', fontWeight: '600' },
   status: { marginTop: 8, color: '#666' },
+  tableMeta: { color: '#666', fontSize: 12, marginTop: 2 },
   error: { color: 'red' },
 });
