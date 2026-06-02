@@ -71,7 +71,7 @@ export default function CategoriesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  container: { padding: 16, backgroundColor: '#fff' },
   header: { fontSize: 24, fontWeight: '700', marginBottom: 12 },
   item: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
   itemText: { fontSize: 16 },

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
 import { useOrderStore } from '../stores/orderStore';
 
@@ -40,14 +40,17 @@ export default function OrderScreen() {
     if (paramTableId) setTable(paramTableId, paramTableName);
   }, [paramTableId, paramTableName]);
 
-  useEffect(() => {
+  const fetchExistingOrder = React.useCallback(() => {
     let mounted = true;
-    async function fetchExistingOrder() {
+
+    const loadOrder = async () => {
       if (!paramOrderId) {
         if (paramTableId) {
           if (mounted) {
             setCurrentOrderId(null);
             setCurrentOrderStatus(null);
+            setHeldOrderId(null);
+            clear();
           }
           return;
         }
@@ -59,16 +62,18 @@ export default function OrderScreen() {
         }
         return;
       }
-      setLoadingOrder(true);
-      setError(null);
+      if (mounted) {
+        setLoadingOrder(true);
+        setError(null);
+      }
       try {
         const { data: order, error: orderError } = await supabase.from('orders').select('*').eq('id', paramOrderId).single();
         if (orderError) throw orderError;
         if (!order) throw new Error('Order not found');
 
         if (mounted) {
-            setCurrentOrderId(order.id);
-            setCurrentOrderStatus(order.status);
+          setCurrentOrderId(order.id);
+          setCurrentOrderStatus(order.status);
         }
 
         const { data: itemsData, error: itemsError } = await supabase
@@ -97,12 +102,24 @@ export default function OrderScreen() {
       } finally {
         if (mounted) setLoadingOrder(false);
       }
-    }
-    fetchExistingOrder();
+    };
+
+    loadOrder();
     return () => {
       mounted = false;
     };
-  }, [paramOrderId, paramTableName, setTable, setHeldOrderId, clear]);
+  }, [paramOrderId, paramTableId, paramTableName, setHeldOrderId, clear]);
+
+  useEffect(() => {
+    const cleanup = fetchExistingOrder();
+    return cleanup;
+  }, [fetchExistingOrder]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      return fetchExistingOrder();
+    }, [fetchExistingOrder])
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -112,7 +129,10 @@ export default function OrderScreen() {
       try {
         const { data, error } = await supabase.from('categories').select('id, name').order('id');
         if (error) throw error;
-        if (mounted) setCategories((data as Category[]) || []);
+        if (mounted) {
+          const categoriesData = (data as Category[]) || [];
+          setCategories(categoriesData);
+        }
       } catch (err: any) {
         if (mounted) setError(err.message || 'Failed to load categories');
       } finally {
@@ -122,6 +142,12 @@ export default function OrderScreen() {
     fetchCats();
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (!loadingCategories && categories && categories.length > 0 && selectedCategory == null) {
+      setSelectedCategory(categories[0].id);
+    }
+  }, [loadingCategories, categories, selectedCategory]);
 
   useEffect(() => {
     if (selectedCategory == null) return;
@@ -177,7 +203,7 @@ export default function OrderScreen() {
 
   const handleSaveOrder = async (hold = false) => {
     const stateItems = useOrderStore.getState().items;
-    const tableId = useOrderStore.getState().tableId;
+    const tableId = paramTableId ?? useOrderStore.getState().tableId;
     if (!tableId) return Alert.alert('Select table first');
     if (stateItems.length === 0) return Alert.alert('Cart is empty');
 
@@ -310,31 +336,7 @@ export default function OrderScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            ListEmptyComponent={<Text style={{ color: '#666' }}>Select a category to show items.</Text>}
-          />
-        )}
-      </View>
-
-      <View style={styles.cart}> 
-        <Text style={styles.sectionTitle}>Cart</Text>
-        {items.length === 0 ? <Text style={{ color: '#666' }}>Cart is empty</Text> : (
-          <FlatList
-            data={items}
-            keyExtractor={(i) => String(i.id)}
-            renderItem={({ item }) => (
-              <View style={styles.cartRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={{ color: '#666' }}>${(item.price * item.quantity).toFixed(2)}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => decreaseQty(item.id)} style={styles.qtyBtn}><Text>-</Text></TouchableOpacity>
-                  <Text style={{ marginHorizontal: 8 }}>{item.quantity}</Text>
-                  <TouchableOpacity onPress={() => increaseQty(item.id)} style={styles.qtyBtn}><Text>+</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={() => removeItem(item.id)} style={[styles.qtyBtn, { marginLeft: 8 }]}><Text>×</Text></TouchableOpacity>
-                </View>
-              </View>
-            )}
+            ListEmptyComponent={<Text style={{ color: '#666' }}>{selectedCategory == null ? 'Select a category to show items.' : 'No menu items found for this category.'}</Text>}
           />
         )}
 
