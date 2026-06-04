@@ -340,6 +340,34 @@ export default function OrderScreen() {
           />
         )}
 
+        <View style={styles.cart}>
+          <Text style={styles.sectionTitle}>Current Order</Text>
+          {items.length === 0 ? (
+            <Text style={{ color: '#666' }}>No items selected yet.</Text>
+          ) : (
+            items.map((item) => (
+              <View key={String(item.id)} style={styles.cartRow}>
+                <View style={styles.cartItemInfo}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)} each</Text>
+                </View>
+                <View style={styles.quantityControls}>
+                  <TouchableOpacity style={styles.qtyBtn} onPress={() => decreaseQty(item.id)}>
+                    <Text style={styles.qtyBtnText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.qtyText}>{item.quantity}</Text>
+                  <TouchableOpacity style={styles.qtyBtn} onPress={() => increaseQty(item.id)}>
+                    <Text style={styles.qtyBtnText}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.id)}>
+                    <Text style={styles.removeBtnText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
         <View style={styles.totals}>
           <Text>Subtotal: ${cartTotal.toFixed(2)}</Text>
           <Text style={{ fontWeight: '700' }}>Total: ${cartTotal.toFixed(2)}</Text>
@@ -412,9 +440,15 @@ const styles = StyleSheet.create({
   itemName: { fontWeight: '600' },
   itemPrice: { color: '#666' },
   addButton: { backgroundColor: '#9CAF88', padding: 8, borderRadius: 6 },
-  cart: { marginTop: 8, padding: 8 },
-  cartRow: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: '#fff', borderRadius: 6, marginBottom: 6 },
-  qtyBtn: { padding: 6, backgroundColor: '#eee', borderRadius: 4 },
+  cart: { marginTop: 8, padding: 8, backgroundColor: '#fff', borderRadius: 8 },
+  cartRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  cartItemInfo: { flex: 1, paddingRight: 8 },
+  quantityControls: { flexDirection: 'row', alignItems: 'center' },
+  qtyBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eee', borderRadius: 4 },
+  qtyBtnText: { fontSize: 18, fontWeight: '700' },
+  qtyText: { minWidth: 28, textAlign: 'center', fontWeight: '700' },
+  removeBtn: { marginLeft: 8, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: '#FCE4EC', borderRadius: 6 },
+  removeBtnText: { color: '#AD1457', fontWeight: '700' },
   totals: { marginTop: 8, alignItems: 'flex-end' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', marginTop: 8, gap: 6 },
   actionBtn: { padding: 10, borderRadius: 6, minWidth: 80, alignItems: 'center', flex: 0.45 },

@@ -22,10 +22,20 @@ export default function BillingScreen() {
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [processing, setProcessing] = useState(false);
 
+  const clearActiveBill = () => {
+    setOrder(null);
+    setItems(null);
+    setDiscount(0);
+    setPaymentMethod('Cash');
+  };
+
   useEffect(() => {
     let mounted = true;
     async function fetch() {
-      if (!orderId) return;
+      if (!orderId) {
+        clearActiveBill();
+        return;
+      }
       setLoading(true);
       try {
         const { data: o, error: orderError } = await supabase.from('orders').select('*').eq('id', orderId).single();
@@ -107,6 +117,8 @@ export default function BillingScreen() {
           line_total: Number(item.line_total ?? item.unit_price * item.quantity),
         })),
       });
+      navigation.setParams({ orderId: undefined });
+      clearActiveBill();
     } catch (err: any) {
       Alert.alert('Failed', err.message || String(err));
     } finally {
@@ -119,7 +131,7 @@ export default function BillingScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Billing</Text>
-      {!order ? <Text style={{ color: '#666' }}>No order selected</Text> : (
+      {!order ? <Text style={{ color: '#666' }}>No active bill selected</Text> : (
         <View>
           <View style={styles.row}>
             <Text style={styles.label}>Order ID</Text>
