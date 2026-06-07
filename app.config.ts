@@ -3,6 +3,8 @@ import { ExpoConfig, ConfigContext } from '@expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
+  name: config.name ?? 'OG Trail POS',
+  slug: config.slug ?? 'og-trail-pos',
   extra: {
     ...config.extra,
     SUPABASE_URL: process.env.SUPABASE_URL,

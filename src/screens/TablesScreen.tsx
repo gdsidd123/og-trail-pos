@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '../services/supabaseClient';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 
 type Table = { id: number; name?: string; capacity?: number | null; location?: string | null; status?: string; activeOrderId?: string };
+type RootTabParamList = {
+  Order: { tableId: number; tableName?: string; orderId?: string };
+};
 
 export default function TablesScreen() {
   const [tables, setTables] = useState<Table[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootTabParamList>>();
 
   async function fetchTables() {
     setLoading(true);
@@ -99,7 +102,7 @@ export default function TablesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.navigate('Order' as never, { tableId: item.id, tableName: item.name, orderId: item.activeOrderId } as never)}
+            onPress={() => navigation.navigate('Order', { tableId: item.id, tableName: item.name, orderId: item.activeOrderId })}
           >
             <View>
               <Text style={styles.tableName}>{item.name ?? `Table ${item.id}`}</Text>
