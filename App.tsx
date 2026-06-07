@@ -5,10 +5,13 @@ import type { Session } from '@supabase/supabase-js';
 import RootNavigator from './src/navigation/RootNavigator';
 import LoginScreen from './src/screens/LoginScreen';
 import { supabase } from './src/services/supabaseClient';
+import type { UserRole } from './src/auth/AuthContext';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -30,7 +33,41 @@ export default function App() {
     };
   }, []);
 
-  if (loadingSession) {
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchProfile() {
+      if (!session?.user?.id) {
+        setRole(null);
+        setLoadingProfile(false);
+        return;
+      }
+
+      setLoadingProfile(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (error) throw error;
+        if (!mounted) return;
+
+        setRole((data?.role as UserRole) || 'server');
+      } catch {
+        if (mounted) setRole('server');
+      } finally {
+        if (mounted) setLoadingProfile(false);
+      }
+    }
+
+    fetchProfile();
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
+
+  if (loadingSession || loadingProfile) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -43,7 +80,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {session ? <RootNavigator /> : <LoginScreen />}
+      {session ? <RootNavigator role={role || 'server'} /> : <LoginScreen />}
       <StatusBar style="auto" />
     </SafeAreaView>
   );

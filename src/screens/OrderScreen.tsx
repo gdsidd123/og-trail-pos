@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
 import { useOrderStore } from '../stores/orderStore';
+import { useUserRole } from '../auth/AuthContext';
 
 type RouteParams = { tableId?: number | string; tableName?: string; orderId?: string };
 type Category = { id: number; name: string };
@@ -35,6 +36,8 @@ export default function OrderScreen() {
   const [currentOrderStatus, setCurrentOrderStatus] = useState<string | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const navigation = useNavigation<any>();
+  const role = useUserRole();
+  const canGenerateBill = role !== 'server';
 
   useEffect(() => {
     if (paramTableId) setTable(paramTableId, paramTableName);
@@ -404,7 +407,7 @@ export default function OrderScreen() {
               <Text style={{ color: '#fff' }}>Delete</Text>
             </TouchableOpacity>
           ) : null}
-          {currentOrderId ? (
+          {currentOrderId && canGenerateBill ? (
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#42A5F5' }]} onPress={() => navigation.navigate('Billing', { orderId: currentOrderId })}>
               <Text style={{ color: '#fff' }}>Generate Bill</Text>
             </TouchableOpacity>

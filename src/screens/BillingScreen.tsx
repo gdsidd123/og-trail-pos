@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
+import { useUserRole } from '../auth/AuthContext';
 
 type RouteParams = { orderId?: string };
 
@@ -14,6 +15,8 @@ export default function BillingScreen() {
   const navigation = useNavigation<any>();
   const params = (route.params || {}) as RouteParams;
   const { orderId } = params;
+  const role = useUserRole();
+  const canTakePayment = role !== 'server';
 
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<any | null>(null);
@@ -127,6 +130,15 @@ export default function BillingScreen() {
   };
 
   if (loading) return <View style={styles.container}><ActivityIndicator /></View>;
+
+  if (!canTakePayment) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.header}>Billing</Text>
+        <Text style={{ color: '#666' }}>You do not have access to billing.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

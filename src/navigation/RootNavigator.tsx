@@ -9,9 +9,13 @@ import SettingsScreen from '../screens/SettingsScreen';
 import BillingScreen from '../screens/BillingScreen';
 import ReceiptScreen from '../screens/ReceiptScreen';
 import { SAGE_GREEN, OFF_WHITE, BLACK } from '../constants';
-import { Text } from 'react-native';
+import { AuthRoleProvider, type UserRole } from '../auth/AuthContext';
 
 const Tab = createBottomTabNavigator();
+
+type RootNavigatorProps = {
+  role: UserRole;
+};
 
 const theme = {
   ...DefaultTheme,
@@ -23,26 +27,37 @@ const theme = {
   },
 };
 
-export default function RootNavigator() {
+const roleTabs: Record<UserRole, string[]> = {
+  owner: ['Dashboard', 'Tables', 'Order', 'Menu', 'Billing', 'Receipt', 'Settings'],
+  manager: ['Dashboard', 'Tables', 'Order', 'Menu', 'Billing', 'Receipt', 'Settings'],
+  cashier: ['Tables', 'Order', 'Billing', 'Receipt', 'Settings'],
+  server: ['Tables', 'Order', 'Settings'],
+};
+
+export default function RootNavigator({ role }: RootNavigatorProps) {
+  const canShow = (tabName: string) => roleTabs[role].includes(tabName);
+
   return (
-    <NavigationContainer theme={theme}>
-      <Tab.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: OFF_WHITE },
-          headerTitleStyle: { color: BLACK },
-          tabBarActiveTintColor: SAGE_GREEN,
-          tabBarInactiveTintColor: '#666',
-          tabBarStyle: { backgroundColor: OFF_WHITE },
-        }}
-      >
-        <Tab.Screen name="Dashboard" component={DashboardScreen} />
-        <Tab.Screen name="Tables" component={TablesScreen} />
-        <Tab.Screen name="Order" component={OrderScreen} />
-        <Tab.Screen name="Menu" component={MenuManagementScreen} options={{ title: 'Menu' }} />
-        <Tab.Screen name="Billing" component={BillingScreen} options={{ title: 'Billing' }} />
-        <Tab.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} />
-        <Tab.Screen name="Settings" component={SettingsScreen} />
-      </Tab.Navigator>
-    </NavigationContainer>
+    <AuthRoleProvider role={role}>
+      <NavigationContainer theme={theme}>
+        <Tab.Navigator
+          screenOptions={{
+            headerStyle: { backgroundColor: OFF_WHITE },
+            headerTitleStyle: { color: BLACK },
+            tabBarActiveTintColor: SAGE_GREEN,
+            tabBarInactiveTintColor: '#666',
+            tabBarStyle: { backgroundColor: OFF_WHITE },
+          }}
+        >
+          {canShow('Dashboard') ? <Tab.Screen name="Dashboard" component={DashboardScreen} /> : null}
+          {canShow('Tables') ? <Tab.Screen name="Tables" component={TablesScreen} /> : null}
+          {canShow('Order') ? <Tab.Screen name="Order" component={OrderScreen} /> : null}
+          {canShow('Menu') ? <Tab.Screen name="Menu" component={MenuManagementScreen} options={{ title: 'Menu' }} /> : null}
+          {canShow('Billing') ? <Tab.Screen name="Billing" component={BillingScreen} options={{ title: 'Billing' }} /> : null}
+          {canShow('Receipt') ? <Tab.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} /> : null}
+          {canShow('Settings') ? <Tab.Screen name="Settings" component={SettingsScreen} /> : null}
+        </Tab.Navigator>
+      </NavigationContainer>
+    </AuthRoleProvider>
   );
 }
