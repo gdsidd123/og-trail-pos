@@ -281,7 +281,11 @@ export default function OrderScreen() {
         source_user_id: userData.user?.id,
       }));
       if (currentOrderId && !isCustomer) {
-        const { error: deleteError } = await supabase.from('order_items').delete().eq('order_id', orderId);
+        const { error: deleteError } = await supabase
+          .from('order_items')
+          .delete()
+          .eq('order_id', orderId)
+          .or('source_role.is.null,source_role.neq.customer');
         if (deleteError) throw deleteError;
       }
       const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload);

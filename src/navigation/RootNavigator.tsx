@@ -57,7 +57,7 @@ export default function RootNavigator({ role, initialTableId, isGuest = false, o
         >
           {canShow('Dashboard') ? <Tab.Screen name="Dashboard" component={DashboardScreen} /> : null}
           {canShow('Tables') ? <Tab.Screen name="Tables" component={TablesScreen} initialParams={{ qrTableId: initialTableId }} /> : null}
-          {canShow('Order') ? <Tab.Screen name="Order" component={OrderScreen} initialParams={{ tableId: initialTableId }} /> : null}
+          {canShow('Order') ? <Tab.Screen name="Order" component={OrderScreen} /> : null}
           {canShow('Menu') ? <Tab.Screen name="Menu" component={MenuManagementScreen} options={{ title: 'Menu' }} /> : null}
           {canShow('Billing') ? <Tab.Screen name="Billing" component={BillingScreen} options={{ title: 'Billing' }} /> : null}
           {canShow('Receipt') ? <Tab.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} /> : null}

@@ -95,9 +95,23 @@ export default function KotScreen() {
       .filter((group) => group.items.length > 0);
   }, [orders, items]);
 
+  const submittedCount = items.filter((item) => item.kot_status === 'submitted').length;
+  const preparingCount = items.filter((item) => item.kot_status === 'preparing').length;
+
   const elapsedMinutes = (value?: string) => {
     if (!value) return 0;
     return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
+  };
+
+  const elapsedStyle = (minutes: number) => {
+    if (minutes >= 20) return styles.elapsedDanger;
+    if (minutes >= 10) return styles.elapsedWarn;
+    return styles.elapsedFresh;
+  };
+
+  const statusStyle = (status: KotItem['kot_status']) => {
+    if (status === 'preparing') return styles.statusPreparing;
+    return styles.statusSubmitted;
   };
 
   const updateItemStatus = async (item: KotItem, nextStatus: 'preparing' | 'done') => {
@@ -135,8 +149,25 @@ export default function KotScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Kitchen Order Tickets</Text>
+      <View style={styles.summaryRow}>
+        <View style={styles.summaryChip}>
+          <Text style={styles.summaryValue}>{groups.length}</Text>
+          <Text style={styles.summaryLabel}>Orders</Text>
+        </View>
+        <View style={styles.summaryChip}>
+          <Text style={styles.summaryValue}>{submittedCount}</Text>
+          <Text style={styles.summaryLabel}>New</Text>
+        </View>
+        <View style={styles.summaryChip}>
+          <Text style={styles.summaryValue}>{preparingCount}</Text>
+          <Text style={styles.summaryLabel}>Preparing</Text>
+        </View>
+      </View>
       {groups.length === 0 ? (
-        <Text style={styles.emptyText}>No active KOT items.</Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Kitchen queue is clear</Text>
+          <Text style={styles.emptyText}>New saved items will appear here automatically.</Text>
+        </View>
       ) : (
         groups.map((group) => (
           <View key={group.order.id} style={styles.card}>
@@ -145,28 +176,37 @@ export default function KotScreen() {
                 <Text style={styles.tableTitle}>Table {group.order.table_id}</Text>
                 <Text style={styles.orderMeta}>Order {group.order.id.slice(0, 8)}</Text>
               </View>
-              <Text style={styles.orderStatus}>{group.order.status}</Text>
+              <View style={styles.orderBadge}>
+                <Text style={styles.orderBadgeText}>{group.items.length} items</Text>
+              </View>
             </View>
 
-            {group.items.map((item) => (
-              <View key={item.id} style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.quantity} x {item.name}</Text>
-                  <Text style={styles.itemMeta}>
-                    {item.kot_status} • {elapsedMinutes(item.kot_submitted_at)} min • {item.source_role || 'unknown'}
-                  </Text>
+            {group.items.map((item) => {
+              const elapsed = elapsedMinutes(item.kot_submitted_at);
+              return (
+                <View key={item.id} style={styles.itemRow}>
+                  <View style={styles.itemInfo}>
+                    <View style={styles.itemTitleRow}>
+                      <Text style={styles.itemName}>{item.quantity} x {item.name}</Text>
+                      <Text style={[styles.itemStatus, statusStyle(item.kot_status)]}>{item.kot_status}</Text>
+                    </View>
+                    <View style={styles.itemMetaRow}>
+                      <Text style={[styles.elapsedPill, elapsedStyle(elapsed)]}>{elapsed} min</Text>
+                      <Text style={styles.sourceText}>{item.source_role || 'unknown'}</Text>
+                    </View>
+                  </View>
+                  {item.kot_status === 'submitted' ? (
+                    <TouchableOpacity style={styles.prepareButton} onPress={() => updateItemStatus(item, 'preparing')}>
+                      <Text style={styles.buttonText}>Start</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.doneButton} onPress={() => updateItemStatus(item, 'done')}>
+                      <Text style={styles.buttonText}>Done</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-                {item.kot_status === 'submitted' ? (
-                  <TouchableOpacity style={styles.prepareButton} onPress={() => updateItemStatus(item, 'preparing')}>
-                    <Text style={styles.buttonText}>Preparing</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.doneButton} onPress={() => updateItemStatus(item, 'done')}>
-                    <Text style={styles.buttonText}>Done</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+              );
+            })}
           </View>
         ))
       )}
@@ -179,19 +219,35 @@ const styles = StyleSheet.create({
   content: { padding: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: '#FAF9F6' },
   title: { fontSize: 24, fontWeight: '800', marginBottom: 16 },
+  summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  summaryChip: { flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 12, alignItems: 'center' },
+  summaryValue: { fontSize: 22, fontWeight: '800' },
+  summaryLabel: { color: '#666', marginTop: 2 },
   card: { backgroundColor: '#fff', borderRadius: 8, padding: 14, marginBottom: 14 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   tableTitle: { fontSize: 18, fontWeight: '800' },
   orderMeta: { color: '#666', marginTop: 2 },
-  orderStatus: { color: '#333', fontWeight: '700', textTransform: 'capitalize' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EEE', paddingVertical: 10 },
+  orderBadge: { backgroundColor: '#F1F3F4', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10 },
+  orderBadgeText: { color: '#333', fontWeight: '700' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EEE', paddingVertical: 12 },
   itemInfo: { flex: 1, paddingRight: 8 },
-  itemName: { fontWeight: '700' },
-  itemMeta: { color: '#666', marginTop: 4, textTransform: 'capitalize' },
-  prepareButton: { backgroundColor: '#42A5F5', paddingVertical: 9, paddingHorizontal: 12, borderRadius: 6 },
-  doneButton: { backgroundColor: '#4CAF50', paddingVertical: 9, paddingHorizontal: 12, borderRadius: 6 },
+  itemTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  itemName: { fontSize: 16, fontWeight: '800' },
+  itemStatus: { overflow: 'hidden', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 8, fontSize: 12, fontWeight: '800', textTransform: 'capitalize' },
+  statusSubmitted: { backgroundColor: '#FFF3CD', color: '#7A4F01' },
+  statusPreparing: { backgroundColor: '#E3F2FD', color: '#0D47A1' },
+  itemMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  elapsedPill: { overflow: 'hidden', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 8, fontWeight: '800' },
+  elapsedFresh: { backgroundColor: '#E8F5E9', color: '#1B5E20' },
+  elapsedWarn: { backgroundColor: '#FFF3CD', color: '#7A4F01' },
+  elapsedDanger: { backgroundColor: '#FFEBEE', color: '#B71C1C' },
+  sourceText: { color: '#666', textTransform: 'capitalize' },
+  prepareButton: { minWidth: 72, backgroundColor: '#42A5F5', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 6, alignItems: 'center' },
+  doneButton: { minWidth: 72, backgroundColor: '#4CAF50', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 6, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '700' },
   statusText: { marginTop: 8, color: '#666' },
+  emptyCard: { backgroundColor: '#fff', borderRadius: 8, padding: 16 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
   emptyText: { color: '#666' },
   errorTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
   errorText: { color: 'red', textAlign: 'center' },

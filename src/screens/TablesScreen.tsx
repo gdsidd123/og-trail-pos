@@ -4,9 +4,9 @@ import { supabase } from '../services/supabaseClient';
 import { NavigationProp, useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useAuth, useUserRole } from '../auth/AuthContext';
 
-type Table = { id: number; name?: string; capacity?: number | null; location?: string | null; status?: string; activeOrderId?: string };
+type Table = { id: number | string; name?: string; capacity?: number | null; location?: string | null; status?: string; activeOrderId?: string };
 type RootTabParamList = {
-  Order: { tableId: number; tableName?: string; orderId?: string };
+  Order: { tableId: number | string; tableName?: string; orderId?: string };
 };
 type RouteParams = { qrTableId?: number | null };
 
@@ -85,7 +85,7 @@ export default function TablesScreen() {
 
   useEffect(() => {
     if (!isCustomer || openedQrTable || !qrTableId || !tables?.length) return;
-    const qrTable = tables.find((table) => table.id === qrTableId);
+    const qrTable = tables.find((table) => tableNumber(table) === qrTableId);
     if (!qrTable) return;
     setOpenedQrTable(true);
     navigation.navigate('Order', { tableId: qrTable.id, tableName: qrTable.name });
@@ -102,6 +102,22 @@ export default function TablesScreen() {
         return <Text style={[styles.badge, { backgroundColor: '#A5D6A7' }]}>Available</Text>;
     }
   }
+
+  function tableLabel(table: Table) {
+    const source = table.name || String(table.id);
+    const trailingNumber = source.match(/\d+$/)?.[0];
+    return trailingNumber ? `Table ${trailingNumber}` : source;
+  }
+
+  function tableNumber(table: Table) {
+    const source = table.name || String(table.id);
+    const trailingNumber = source.match(/\d+$/)?.[0];
+    return trailingNumber ? Number(trailingNumber) : Number(table.id);
+  }
+
+  const visibleTables = isCustomer && qrTableId
+    ? (tables || []).filter((table) => tableNumber(table) === qrTableId)
+    : (tables || []);
 
   if (loading) return (
     <View style={styles.container}><ActivityIndicator /><Text style={styles.status}>Loading tables…</Text></View>
@@ -122,7 +138,7 @@ export default function TablesScreen() {
       </View>
       {isCustomer && qrTableId ? <Text style={styles.qrHint}>QR table selected: {qrTableId}</Text> : null}
       <FlatList
-        data={tables || []}
+        data={visibleTables}
         keyExtractor={(t) => String(t.id)}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -130,8 +146,7 @@ export default function TablesScreen() {
             onPress={() => navigation.navigate('Order', { tableId: item.id, tableName: item.name, orderId: isCustomer ? undefined : item.activeOrderId })}
           >
             <View>
-              <Text style={styles.tableName}>{item.name ?? `Table ${item.id}`}</Text>
-              <Text style={styles.tableId}>#{item.id}</Text>
+              <Text style={styles.tableName}>{tableLabel(item)}</Text>
               {item.activeOrderId ? (
                 <Text style={styles.tableMeta}>Order {item.activeOrderId.slice(0, 8)} — {item.status}</Text>
               ) : (
@@ -154,7 +169,6 @@ const styles = StyleSheet.create({
   qrHint: { color: '#666', marginBottom: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#fff', borderRadius: 8 },
   tableName: { fontSize: 16, fontWeight: '600' },
-  tableId: { color: '#666' },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, color: '#000', fontWeight: '600' },
   status: { marginTop: 8, color: '#666' },
   tableMeta: { color: '#666', fontSize: 12, marginTop: 2 },

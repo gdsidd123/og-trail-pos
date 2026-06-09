@@ -17,8 +17,9 @@ export default function App() {
 
   const readTableIdFromUrl = (url: string | null) => {
     if (!url) return;
-    const match = url.match(/(?:table\/|[?&]tableId=)(\d+)/i);
-    if (match?.[1]) setInitialTableId(Number(match[1]));
+    const match = url.match(/(?:\/--)?\/table\/(\d+)|[?&]tableId=(\d+)/i);
+    const tableId = match?.[1] || match?.[2];
+    if (tableId) setInitialTableId(Number(tableId));
   };
 
   useEffect(() => {
