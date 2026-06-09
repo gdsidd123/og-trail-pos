@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, SafeAreaView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, SafeAreaView, StyleSheet, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import RootNavigator from './src/navigation/RootNavigator';
 import LoginScreen from './src/screens/LoginScreen';
@@ -12,9 +12,25 @@ export default function App() {
   const [loadingSession, setLoadingSession] = useState(true);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [initialTableId, setInitialTableId] = useState<number | null>(null);
+  const [guestMode, setGuestMode] = useState(false);
+
+  const readTableIdFromUrl = (url: string | null) => {
+    if (!url) return;
+    const match = url.match(/(?:table\/|[?&]tableId=)(\d+)/i);
+    if (match?.[1]) setInitialTableId(Number(match[1]));
+  };
 
   useEffect(() => {
     let mounted = true;
+
+    Linking.getInitialURL().then((url) => {
+      if (mounted) readTableIdFromUrl(url);
+    });
+
+    const linkingSubscription = Linking.addEventListener('url', ({ url }) => {
+      readTableIdFromUrl(url);
+    });
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
@@ -24,11 +40,13 @@ export default function App() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (nextSession) setGuestMode(false);
       setLoadingSession(false);
     });
 
     return () => {
       mounted = false;
+      linkingSubscription.remove();
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -53,9 +71,9 @@ export default function App() {
         if (error) throw error;
         if (!mounted) return;
 
-        setRole((data?.role as UserRole) || 'server');
+        setRole((data?.role as UserRole) || 'customer');
       } catch {
-        if (mounted) setRole('server');
+        if (mounted) setRole('customer');
       } finally {
         if (mounted) setLoadingProfile(false);
       }
@@ -80,7 +98,19 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {session ? <RootNavigator role={role || 'server'} /> : <LoginScreen />}
+      {session || guestMode ? (
+        <RootNavigator
+          role={guestMode ? 'customer' : role || 'customer'}
+          initialTableId={initialTableId}
+          isGuest={guestMode}
+          onLogout={() => {
+            setGuestMode(false);
+            supabase.auth.signOut();
+          }}
+        />
+      ) : (
+        <LoginScreen initialMode={initialTableId ? 'customer' : 'staff'} onContinueAsGuest={() => setGuestMode(true)} />
+      )}
       <StatusBar style="auto" />
     </SafeAreaView>
   );

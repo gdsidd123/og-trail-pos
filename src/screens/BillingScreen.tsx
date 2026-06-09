@@ -16,7 +16,7 @@ export default function BillingScreen() {
   const params = (route.params || {}) as RouteParams;
   const { orderId } = params;
   const role = useUserRole();
-  const canTakePayment = role !== 'server';
+  const canTakePayment = ['owner', 'manager', 'cashier'].includes(role);
 
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<any | null>(null);

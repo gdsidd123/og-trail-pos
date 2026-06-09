@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
 import { useOrderStore } from '../stores/orderStore';
-import { useUserRole } from '../auth/AuthContext';
+import { useAuth, useUserRole } from '../auth/AuthContext';
 
 type RouteParams = { tableId?: number | string; tableName?: string; orderId?: string };
 type Category = { id: number; name: string };
@@ -37,7 +37,11 @@ export default function OrderScreen() {
   const [loadingOrder, setLoadingOrder] = useState(false);
   const navigation = useNavigation<any>();
   const role = useUserRole();
-  const canGenerateBill = role !== 'server';
+  const { isGuest, logout } = useAuth();
+  const isCustomer = role === 'customer';
+  const canGenerateBill = ['owner', 'manager', 'cashier'].includes(role);
+  const canHoldOrder = !isCustomer;
+  const canCancelOrder = !isCustomer;
 
   useEffect(() => {
     if (paramTableId) setTable(paramTableId, paramTableName);
@@ -57,6 +61,15 @@ export default function OrderScreen() {
           }
           return;
         }
+        if (mounted) {
+          setCurrentOrderId(null);
+          setCurrentOrderStatus(null);
+          setHeldOrderId(null);
+          clear();
+        }
+        return;
+      }
+      if (isCustomer) {
         if (mounted) {
           setCurrentOrderId(null);
           setCurrentOrderStatus(null);
@@ -111,7 +124,7 @@ export default function OrderScreen() {
     return () => {
       mounted = false;
     };
-  }, [paramOrderId, paramTableId, paramTableName, setHeldOrderId, clear]);
+  }, [paramOrderId, paramTableId, paramTableName, setHeldOrderId, clear, isCustomer]);
 
   useEffect(() => {
     const cleanup = fetchExistingOrder();
@@ -254,15 +267,31 @@ export default function OrderScreen() {
         setHeldOrderId(null);
       }
 
-      const itemsPayload = stateItems.map((it) => ({ order_id: orderId, menu_item_id: it.id, name: it.name, unit_price: it.price, quantity: it.quantity }));
-      if (currentOrderId) {
+      const { data: userData } = isGuest ? { data: { user: null } } : await supabase.auth.getUser();
+      const now = new Date().toISOString();
+      const itemsPayload = stateItems.map((it) => ({
+        order_id: orderId,
+        menu_item_id: it.id,
+        name: it.name,
+        unit_price: it.price,
+        quantity: it.quantity,
+        kot_status: 'submitted',
+        kot_submitted_at: now,
+        source_role: role,
+        source_user_id: userData.user?.id,
+      }));
+      if (currentOrderId && !isCustomer) {
         const { error: deleteError } = await supabase.from('order_items').delete().eq('order_id', orderId);
         if (deleteError) throw deleteError;
       }
       const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload);
       if (itemsError) throw itemsError;
 
-      Alert.alert(hold ? 'Order held' : 'Order saved');
+      if (isCustomer) {
+        clear();
+      }
+
+      Alert.alert(hold ? 'Order held' : 'Order saved', isCustomer ? 'Your items were sent to the kitchen.' : undefined);
       await fetchHeldOrders(tableId);
     } catch (err: any) {
       Alert.alert('Save failed', err.message || String(err));
@@ -298,7 +327,14 @@ export default function OrderScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Order</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Order</Text>
+        {isCustomer ? (
+          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       <Text style={styles.subheader}>Table: {paramTableName ?? paramTableId ?? 'None'}</Text>
       {currentOrderId ? (
         <Text style={styles.orderInfo}>Order: {currentOrderId.slice(0, 8)} — {currentOrderStatus ?? 'open'}</Text>
@@ -377,16 +413,20 @@ export default function OrderScreen() {
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FFD54F' }]} onPress={() => handleSaveOrder(true)}>
-            <Text>Save & Hold</Text>
-          </TouchableOpacity>
+          {canHoldOrder ? (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FFD54F' }]} onPress={() => handleSaveOrder(true)}>
+              <Text>Save & Hold</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#A5D6A7' }]} onPress={() => handleSaveOrder(false)}>
             <Text>Save</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#E0E0E0' }]} onPress={() => fetchHeldOrders(paramTableId || useOrderStore.getState().tableId || '')}>
-            <Text>Refresh Held</Text>
-          </TouchableOpacity>
-          {currentOrderId ? (
+          {canHoldOrder ? (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#E0E0E0' }]} onPress={() => fetchHeldOrders(paramTableId || useOrderStore.getState().tableId || '')}>
+              <Text>Refresh Held</Text>
+            </TouchableOpacity>
+          ) : null}
+          {currentOrderId && canCancelOrder ? (
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F06292' }]} onPress={async () => {
               // soft delete
               Alert.alert('Confirm', 'Cancel this order? (mark as cancelled)', [
@@ -414,16 +454,18 @@ export default function OrderScreen() {
           ) : null}
         </View>
 
-        <View style={{ marginTop: 8 }}>
-          <Text style={{ fontWeight: '700' }}>Held Orders</Text>
-          {loadingHeld ? <ActivityIndicator /> : heldOrders && heldOrders.length > 0 ? (
-            heldOrders.map((o) => (
-              <TouchableOpacity key={o.id} style={{ padding: 8, backgroundColor: '#fff', marginTop: 6, borderRadius: 6 }} onPress={() => handleResume(o)}>
-                <Text>#{o.id} — {o.status} — ${Number(o.subtotal || 0).toFixed(2)}</Text>
-              </TouchableOpacity>
-            ))
-          ) : <Text style={{ color: '#666' }}>No held orders</Text>}
-        </View>
+        {canHoldOrder ? (
+          <View style={{ marginTop: 8 }}>
+            <Text style={{ fontWeight: '700' }}>Held Orders</Text>
+            {loadingHeld ? <ActivityIndicator /> : heldOrders && heldOrders.length > 0 ? (
+              heldOrders.map((o) => (
+                <TouchableOpacity key={o.id} style={{ padding: 8, backgroundColor: '#fff', marginTop: 6, borderRadius: 6 }} onPress={() => handleResume(o)}>
+                  <Text>#{o.id} — {o.status} — ${Number(o.subtotal || 0).toFixed(2)}</Text>
+                </TouchableOpacity>
+              ))
+            ) : <Text style={{ color: '#666' }}>No held orders</Text>}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -431,6 +473,7 @@ export default function OrderScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 12, backgroundColor: '#FAF9F6' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   header: { fontSize: 20, fontWeight: '700' },
   subheader: { color: '#666', marginBottom: 8 },
   orderInfo: { color: '#333', marginBottom: 8, fontSize: 12 },
@@ -455,4 +498,6 @@ const styles = StyleSheet.create({
   totals: { marginTop: 8, alignItems: 'flex-end' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', marginTop: 8, gap: 6 },
   actionBtn: { padding: 10, borderRadius: 6, minWidth: 80, alignItems: 'center', flex: 0.45 },
+  logoutButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#E0E0E0' },
+  logoutText: { fontWeight: '700', color: '#333' },
 });

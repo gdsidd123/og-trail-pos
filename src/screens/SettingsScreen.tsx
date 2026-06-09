@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { SAGE_GREEN } from '../constants';
-import { useUserRole } from '../auth/AuthContext';
+import { useAuth, useUserRole } from '../auth/AuthContext';
 
 export default function SettingsScreen() {
   const role = useUserRole();
+  const { isGuest, logout } = useAuth();
   const [email, setEmail] = useState<string>('Unknown');
 
   useEffect(() => {
@@ -21,6 +22,11 @@ export default function SettingsScreen() {
   }, []);
 
   const handleLogout = async () => {
+    if (isGuest) {
+      logout();
+      return;
+    }
+
     const { error } = await supabase.auth.signOut();
     if (error) {
       Alert.alert('Logout failed', error.message);

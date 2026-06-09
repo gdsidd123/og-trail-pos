@@ -1,18 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '../services/supabaseClient';
-import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NavigationProp, useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { useAuth, useUserRole } from '../auth/AuthContext';
 
 type Table = { id: number; name?: string; capacity?: number | null; location?: string | null; status?: string; activeOrderId?: string };
 type RootTabParamList = {
   Order: { tableId: number; tableName?: string; orderId?: string };
 };
+type RouteParams = { qrTableId?: number | null };
 
 export default function TablesScreen() {
+  const route = useRoute();
+  const params = (route.params || {}) as RouteParams;
+  const { qrTableId } = params;
   const [tables, setTables] = useState<Table[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openedQrTable, setOpenedQrTable] = useState(false);
   const navigation = useNavigation<NavigationProp<RootTabParamList>>();
+  const role = useUserRole();
+  const { logout } = useAuth();
+  const isCustomer = role === 'customer';
 
   async function fetchTables() {
     setLoading(true);
@@ -74,6 +83,14 @@ export default function TablesScreen() {
     fetchTables();
   }, []);
 
+  useEffect(() => {
+    if (!isCustomer || openedQrTable || !qrTableId || !tables?.length) return;
+    const qrTable = tables.find((table) => table.id === qrTableId);
+    if (!qrTable) return;
+    setOpenedQrTable(true);
+    navigation.navigate('Order', { tableId: qrTable.id, tableName: qrTable.name });
+  }, [isCustomer, openedQrTable, qrTableId, tables, navigation]);
+
   function statusBadge(status?: string) {
     switch ((status || 'available').toLowerCase()) {
       case 'open':
@@ -95,14 +112,22 @@ export default function TablesScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Tables</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Tables</Text>
+        {isCustomer ? (
+          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {isCustomer && qrTableId ? <Text style={styles.qrHint}>QR table selected: {qrTableId}</Text> : null}
       <FlatList
         data={tables || []}
         keyExtractor={(t) => String(t.id)}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.navigate('Order', { tableId: item.id, tableName: item.name, orderId: item.activeOrderId })}
+            onPress={() => navigation.navigate('Order', { tableId: item.id, tableName: item.name, orderId: isCustomer ? undefined : item.activeOrderId })}
           >
             <View>
               <Text style={styles.tableName}>{item.name ?? `Table ${item.id}`}</Text>
@@ -124,7 +149,9 @@ export default function TablesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#FAF9F6' },
-  header: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  header: { fontSize: 20, fontWeight: '700' },
+  qrHint: { color: '#666', marginBottom: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#fff', borderRadius: 8 },
   tableName: { fontSize: 16, fontWeight: '600' },
   tableId: { color: '#666' },
@@ -132,4 +159,6 @@ const styles = StyleSheet.create({
   status: { marginTop: 8, color: '#666' },
   tableMeta: { color: '#666', fontSize: 12, marginTop: 2 },
   error: { color: 'red' },
+  logoutButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#E0E0E0' },
+  logoutText: { fontWeight: '700', color: '#333' },
 });
