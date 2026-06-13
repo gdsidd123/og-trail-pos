@@ -247,7 +247,11 @@ export default function OrderScreen() {
       }
       let orderData: any = null;
 
-      if (orderId) {
+      if (orderId && isCustomer) {
+        const { data, error } = await supabase.from('orders').select().eq('id', orderId).single();
+        if (error) throw error;
+        orderData = data;
+      } else if (orderId) {
         const { data, error } = await supabase.from('orders').update(orderPayload).eq('id', orderId).select().single();
         if (error) throw error;
         orderData = data;

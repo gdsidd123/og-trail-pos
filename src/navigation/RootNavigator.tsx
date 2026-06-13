@@ -9,6 +9,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import BillingScreen from '../screens/BillingScreen';
 import ReceiptScreen from '../screens/ReceiptScreen';
 import KotScreen from '../screens/KotScreen';
+import UnpaidBillsScreen from '../screens/UnpaidBillsScreen';
 import { SAGE_GREEN, OFF_WHITE, BLACK } from '../constants';
 import { AuthRoleProvider, type UserRole } from '../auth/AuthContext';
 
@@ -32,9 +33,9 @@ const theme = {
 };
 
 const roleTabs: Record<UserRole, string[]> = {
-  owner: ['Dashboard', 'Tables', 'Order', 'Menu', 'Billing', 'Receipt', 'KOT', 'Settings'],
-  manager: ['Dashboard', 'Tables', 'Order', 'Menu', 'Billing', 'Receipt', 'KOT', 'Settings'],
-  cashier: ['Tables', 'Order', 'Billing', 'Receipt', 'Settings'],
+  owner: ['Dashboard', 'Tables', 'Order', 'Menu', 'Billing', 'Unpaid', 'Receipt', 'KOT', 'Settings'],
+  manager: ['Dashboard', 'Tables', 'Order', 'Menu', 'Billing', 'Unpaid', 'Receipt', 'KOT', 'Settings'],
+  cashier: ['Tables', 'Order', 'Billing', 'Unpaid', 'Receipt', 'Settings'],
   server: ['Tables', 'Order', 'KOT', 'Settings'],
   customer: ['Tables', 'Order'],
   kitchen: ['KOT', 'Settings'],
@@ -60,6 +61,7 @@ export default function RootNavigator({ role, initialTableId, isGuest = false, o
           {canShow('Order') ? <Tab.Screen name="Order" component={OrderScreen} /> : null}
           {canShow('Menu') ? <Tab.Screen name="Menu" component={MenuManagementScreen} options={{ title: 'Menu' }} /> : null}
           {canShow('Billing') ? <Tab.Screen name="Billing" component={BillingScreen} options={{ title: 'Billing' }} /> : null}
+          {canShow('Unpaid') ? <Tab.Screen name="Unpaid" component={UnpaidBillsScreen} options={{ title: 'Unpaid' }} /> : null}
           {canShow('Receipt') ? <Tab.Screen name="Receipt" component={ReceiptScreen} options={{ title: 'Receipt' }} /> : null}
           {canShow('KOT') ? <Tab.Screen name="KOT" component={KotScreen} options={{ title: 'KOT' }} /> : null}
           {canShow('Settings') ? <Tab.Screen name="Settings" component={SettingsScreen} /> : null}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, TextInput, ScrollView } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
 import { useUserRole } from '../auth/AuthContext';
@@ -22,6 +22,8 @@ export default function BillingScreen() {
   const [order, setOrder] = useState<any | null>(null);
   const [items, setItems] = useState<OrderItem[] | null>(null);
   const [discount, setDiscount] = useState<number>(0);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [processing, setProcessing] = useState(false);
 
@@ -29,6 +31,8 @@ export default function BillingScreen() {
     setOrder(null);
     setItems(null);
     setDiscount(0);
+    setCustomerName('');
+    setCustomerPhone('');
     setPaymentMethod('Cash');
   };
 
@@ -49,6 +53,8 @@ export default function BillingScreen() {
           setOrder(o);
           setItems((its || []) as OrderItem[]);
           setDiscount(Number(o?.discount || 0));
+          setCustomerName(o?.customer_name || '');
+          setCustomerPhone(o?.customer_phone || '');
         }
       } catch (e: any) {
         console.warn(e);
@@ -66,6 +72,33 @@ export default function BillingScreen() {
   }, [items]);
 
   const finalTotal = useMemo(() => Math.max(0, subtotal - discount), [subtotal, discount]);
+
+  const billPayload = () => ({
+    customer_name: customerName.trim() || null,
+    customer_phone: customerPhone.trim() || null,
+    discount,
+    total: finalTotal,
+  });
+
+  const handleSaveBill = async () => {
+    if (!orderId || !order) return;
+    setProcessing(true);
+    try {
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ ...billPayload(), status: 'billed', billed_at: new Date().toISOString() })
+        .eq('id', orderId);
+      if (orderError) throw orderError;
+
+      Alert.alert('Bill saved', 'This bill moved to Unpaid Bills.');
+      navigation.setParams({ orderId: undefined });
+      clearActiveBill();
+    } catch (err: any) {
+      Alert.alert('Save bill failed', err.message || String(err));
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const handleMarkPaid = async () => {
     if (!orderId || !order) return;
@@ -100,7 +133,7 @@ export default function BillingScreen() {
 
       const { data: updatedOrder, error: orderError } = await supabase
         .from('orders')
-        .update({ status: 'paid', discount, total: finalTotal })
+        .update({ ...billPayload(), status: 'paid' })
         .eq('id', orderId)
         .select()
         .single();
@@ -111,6 +144,8 @@ export default function BillingScreen() {
         tableId: order.table_id,
         paymentMethod,
         total: finalTotal,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
         paidAt: paymentPayload.paid_at,
         items: items?.map((item) => ({
           id: item.id,
@@ -141,7 +176,7 @@ export default function BillingScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.header}>Billing</Text>
       {!order ? <Text style={{ color: '#666' }}>No active bill selected</Text> : (
         <View>
@@ -153,6 +188,21 @@ export default function BillingScreen() {
             <Text style={styles.label}>Table</Text>
             <Text style={styles.value}>{order.table_id}</Text>
           </View>
+
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Customer Details</Text>
+          <TextInput
+            style={styles.input}
+            value={customerName}
+            onChangeText={setCustomerName}
+            placeholder="Customer name"
+          />
+          <TextInput
+            style={styles.input}
+            value={customerPhone}
+            onChangeText={setCustomerPhone}
+            keyboardType="phone-pad"
+            placeholder="Customer phone"
+          />
 
           <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Order Items</Text>
           {items?.map((it) => {
@@ -204,17 +254,21 @@ export default function BillingScreen() {
             ))}
           </View>
 
+          <TouchableOpacity style={styles.billBtn} onPress={handleSaveBill} disabled={processing}>
+            <Text style={{ color: '#fff' }}>{processing ? 'Processing...' : 'Save Bill'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.payBtn} onPress={handleMarkPaid} disabled={processing}>
             <Text style={{ color: '#fff' }}>{processing ? 'Processing...' : 'Mark Paid'}</Text>
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 12, backgroundColor: '#FAF9F6' },
+  content: { paddingBottom: 24 },
   header: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   label: { color: '#666', fontSize: 14 },
@@ -228,11 +282,13 @@ const styles = StyleSheet.create({
   summaryLabel: { color: '#444' },
   summaryValue: { color: '#222' },
   discountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 6, padding: 10, marginBottom: 10, backgroundColor: '#fff' },
   discountInput: { minWidth: 100, borderWidth: 1, borderColor: '#DDD', borderRadius: 6, padding: 10, textAlign: 'right', backgroundColor: '#fff' },
   paymentOptions: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
   paymentOption: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: '#CCC', marginRight: 8, marginBottom: 8, backgroundColor: '#fff' },
   paymentOptionSelected: { borderColor: '#4CAF50', backgroundColor: '#E8F5E9' },
   paymentOptionText: { color: '#333' },
   paymentOptionTextSelected: { color: '#2E7D32', fontWeight: '700' },
+  billBtn: { marginTop: 16, backgroundColor: '#42A5F5', padding: 12, borderRadius: 8, alignItems: 'center' },
   payBtn: { marginTop: 16, backgroundColor: '#4CAF50', padding: 12, borderRadius: 8, alignItems: 'center' },
 });

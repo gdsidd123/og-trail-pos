@@ -15,6 +15,8 @@ type RouteParams = {
   tableId?: string | number;
   paymentMethod?: string;
   total?: number;
+  customerName?: string;
+  customerPhone?: string;
   paidAt?: string;
   items?: ReceiptItem[];
 };
@@ -22,7 +24,7 @@ type RouteParams = {
 export default function ReceiptScreen() {
   const route = useRoute();
   const params = (route.params || {}) as RouteParams;
-  const { orderId, tableId, paymentMethod, total, paidAt, items } = params;
+  const { orderId, tableId, paymentMethod, total, customerName, customerPhone, paidAt, items } = params;
   const date = paidAt ? new Date(paidAt) : new Date();
 
   return (
@@ -41,6 +43,12 @@ export default function ReceiptScreen() {
         <Text style={styles.label}>Payment Method</Text>
         <Text style={styles.value}>{paymentMethod ?? 'N/A'}</Text>
       </View>
+      {customerName || customerPhone ? (
+        <View style={styles.section}>
+          <Text style={styles.label}>Customer</Text>
+          <Text style={styles.value}>{customerName || 'N/A'}{customerPhone ? ` • ${customerPhone}` : ''}</Text>
+        </View>
+      ) : null}
       <View style={styles.section}>
         <Text style={styles.label}>Date & Time</Text>
         <Text style={styles.value}>{date.toLocaleString()}</Text>
