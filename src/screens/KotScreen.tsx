@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
+import { formatTableLabel } from '../utils/tableDisplay';
 
 type KotOrder = {
   id: string;
   table_id: number | string;
   status: string;
   created_at?: string;
+  table_name?: string | null;
 };
 
 type KotItem = {
@@ -44,7 +46,14 @@ export default function KotScreen() {
       if (ordersError) throw ordersError;
 
       const orderRows = (activeOrders || []) as KotOrder[];
-      setOrders(orderRows);
+      const tableIds = orderRows.map((order) => order.table_id);
+      let tableNameById: Record<string, string> = {};
+      if (tableIds.length > 0) {
+        const { data: tableRows } = await supabase.from('tables').select('id, name').in('id', tableIds);
+        tableNameById = Object.fromEntries(((tableRows || []) as { id: string | number; name: string }[]).map((table) => [String(table.id), table.name]));
+      }
+      const ordersWithTableNames = orderRows.map((order) => ({ ...order, table_name: tableNameById[String(order.table_id)] || null }));
+      setOrders(ordersWithTableNames);
 
       const orderIds = orderRows.map((order) => order.id);
       if (orderIds.length === 0) {
@@ -173,7 +182,7 @@ export default function KotScreen() {
           <View key={group.order.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View>
-                <Text style={styles.tableTitle}>Table {group.order.table_id}</Text>
+                <Text style={styles.tableTitle}>{formatTableLabel(group.order.table_id, group.order.table_name)}</Text>
                 <Text style={styles.orderMeta}>Order {group.order.id.slice(0, 8)}</Text>
               </View>
               <View style={styles.orderBadge}>
@@ -252,3 +261,5 @@ const styles = StyleSheet.create({
   errorTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
   errorText: { color: 'red', textAlign: 'center' },
 });
+
+

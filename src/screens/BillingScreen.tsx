@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Tex
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
 import { useUserRole } from '../auth/AuthContext';
+import { formatTableLabel } from '../utils/tableDisplay';
 
 type RouteParams = { orderId?: string };
 
@@ -25,6 +26,7 @@ export default function BillingScreen() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
+  const [tableName, setTableName] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
 
   const clearActiveBill = () => {
@@ -34,6 +36,7 @@ export default function BillingScreen() {
     setCustomerName('');
     setCustomerPhone('');
     setPaymentMethod('Cash');
+    setTableName(null);
   };
 
   useEffect(() => {
@@ -49,12 +52,16 @@ export default function BillingScreen() {
         if (orderError) throw orderError;
         const { data: its, error: itemsError } = await supabase.from('order_items').select('id, name, unit_price, quantity, line_total').eq('order_id', orderId);
         if (itemsError) throw itemsError;
+        const { data: tableRow } = o?.table_id
+          ? await supabase.from('tables').select('name').eq('id', o.table_id).maybeSingle()
+          : { data: null };
         if (mounted) {
           setOrder(o);
           setItems((its || []) as OrderItem[]);
           setDiscount(Number(o?.discount || 0));
           setCustomerName(o?.customer_name || '');
           setCustomerPhone(o?.customer_phone || '');
+          setTableName(tableRow?.name || null);
         }
       } catch (e: any) {
         console.warn(e);
@@ -142,6 +149,7 @@ export default function BillingScreen() {
       navigation.navigate('Receipt', {
         orderId,
         tableId: order.table_id,
+        tableName,
         paymentMethod,
         total: finalTotal,
         customerName: customerName.trim(),
@@ -186,7 +194,7 @@ export default function BillingScreen() {
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Table</Text>
-            <Text style={styles.value}>{order.table_id}</Text>
+            <Text style={styles.value}>{formatTableLabel(order.table_id, tableName)}</Text>
           </View>
 
           <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Customer Details</Text>
@@ -216,16 +224,16 @@ export default function BillingScreen() {
               <View key={it.id} style={styles.itemRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName}>{it.name}</Text>
-                  <Text style={styles.itemMeta}>Qty: {quantity} × ${unitPrice.toFixed(2)}</Text>
+                  <Text style={styles.itemMeta}>Qty: {quantity} × Rs. {unitPrice.toFixed(2)}</Text>
                 </View>
-                <Text style={styles.itemTotal}>${lineTotal.toFixed(2)}</Text>
+                <Text style={styles.itemTotal}>Rs. {lineTotal.toFixed(2)}</Text>
               </View>
             );
           })}
 
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>${subtotal.toFixed(2)}</Text>
+            <Text style={styles.summaryValue}>Rs. {subtotal.toFixed(2)}</Text>
           </View>
           <View style={styles.discountRow}>
             <Text style={styles.summaryLabel}>Discount</Text>
@@ -238,7 +246,7 @@ export default function BillingScreen() {
           </View>
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Final Total</Text>
-            <Text style={[styles.summaryValue, { fontWeight: '700' }]}>${finalTotal.toFixed(2)}</Text>
+            <Text style={[styles.summaryValue, { fontWeight: '700' }]}>Rs. {finalTotal.toFixed(2)}</Text>
           </View>
 
           <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Payment Method</Text>
@@ -292,3 +300,8 @@ const styles = StyleSheet.create({
   billBtn: { marginTop: 16, backgroundColor: '#42A5F5', padding: 12, borderRadius: 8, alignItems: 'center' },
   payBtn: { marginTop: 16, backgroundColor: '#4CAF50', padding: 12, borderRadius: 8, alignItems: 'center' },
 });
+
+
+
+
+

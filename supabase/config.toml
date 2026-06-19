@@ -1,0 +1,7 @@
+project_id = "og-trail-pos"
+
+[functions.customer_bootstrap]
+verify_jwt = false
+
+[functions.customer_submit_order]
+verify_jwt = false

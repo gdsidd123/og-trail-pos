@@ -16,7 +16,7 @@ export default function DashboardScreen() {
   const [revenueByMethod, setRevenueByMethod] = useState<RevenueRow[]>([]);
   const [topSellingItems, setTopSellingItems] = useState<TopItem[]>([]);
 
-  const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
+  const formatCurrency = (value: number) => `Rs. ${value.toFixed(2)}`;
 
   const getTodayBounds = () => {
     const start = new Date();
@@ -196,3 +196,5 @@ const styles = StyleSheet.create({
   errorTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
   errorText: { color: 'red', textAlign: 'center' },
 });
+
+

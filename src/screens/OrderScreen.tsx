@@ -7,7 +7,7 @@ import { useAuth, useUserRole } from '../auth/AuthContext';
 
 type RouteParams = { tableId?: number | string; tableName?: string; orderId?: string };
 type Category = { id: number; name: string };
-type MenuItem = { id: number; name: string; price: number; category_id?: number };
+type MenuItem = { id: number; name: string; price: number; category_id?: number; is_available?: boolean };
 
 export default function OrderScreen() {
   const route = useRoute();
@@ -176,7 +176,8 @@ export default function OrderScreen() {
         const candidates = ['menu_items', 'items', 'products'];
         let results: any = null;
         for (const tbl of candidates) {
-          const { data, error } = await supabase.from(tbl).select('id, name, price, category_id').eq('category_id', selectedCategory);
+          const selectColumns = tbl === 'menu_items' ? 'id, name, price, category_id, is_available' : 'id, name, price, category_id';
+          const { data, error } = await supabase.from(tbl).select(selectColumns).eq('category_id', selectedCategory);
           if (error) {
             // table might not exist, continue
             continue;
@@ -185,7 +186,7 @@ export default function OrderScreen() {
           break;
         }
         if (!results) throw new Error('No items table found or no items for category');
-        if (mounted) setMenuItems(results as MenuItem[]);
+        if (mounted) setMenuItems(((results as MenuItem[]) || []).filter((item) => item.is_available !== false));
       } catch (err: any) {
         if (mounted) setError(err.message || 'Failed to load items');
       } finally {
@@ -376,7 +377,7 @@ export default function OrderScreen() {
               <View style={styles.itemRow}>
                 <View>
                   <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
+                  <Text style={styles.itemPrice}>Rs. {Number(item.price).toFixed(2)}</Text>
                 </View>
                 <TouchableOpacity style={styles.addButton} onPress={() => handleAdd(item)}>
                   <Text style={{ color: '#fff' }}>Add</Text>
@@ -396,7 +397,7 @@ export default function OrderScreen() {
               <View key={String(item.id)} style={styles.cartRow}>
                 <View style={styles.cartItemInfo}>
                   <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)} each</Text>
+                  <Text style={styles.itemPrice}>Rs. {Number(item.price).toFixed(2)} each</Text>
                 </View>
                 <View style={styles.quantityControls}>
                   <TouchableOpacity style={styles.qtyBtn} onPress={() => decreaseQty(item.id)}>
@@ -416,8 +417,8 @@ export default function OrderScreen() {
         </View>
 
         <View style={styles.totals}>
-          <Text>Subtotal: ${cartTotal.toFixed(2)}</Text>
-          <Text style={{ fontWeight: '700' }}>Total: ${cartTotal.toFixed(2)}</Text>
+          <Text>Subtotal: Rs. {cartTotal.toFixed(2)}</Text>
+          <Text style={{ fontWeight: '700' }}>Total: Rs. {cartTotal.toFixed(2)}</Text>
         </View>
 
         <View style={styles.actions}>
@@ -468,7 +469,7 @@ export default function OrderScreen() {
             {loadingHeld ? <ActivityIndicator /> : heldOrders && heldOrders.length > 0 ? (
               heldOrders.map((o) => (
                 <TouchableOpacity key={o.id} style={{ padding: 8, backgroundColor: '#fff', marginTop: 6, borderRadius: 6 }} onPress={() => handleResume(o)}>
-                  <Text>#{o.id} — {o.status} — ${Number(o.subtotal || 0).toFixed(2)}</Text>
+                  <Text>#{o.id} — {o.status} — Rs. {Number(o.subtotal || 0).toFixed(2)}</Text>
                 </TouchableOpacity>
               ))
             ) : <Text style={{ color: '#666' }}>No held orders</Text>}
@@ -509,3 +510,7 @@ const styles = StyleSheet.create({
   logoutButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#E0E0E0' },
   logoutText: { fontWeight: '700', color: '#333' },
 });
+
+
+
+

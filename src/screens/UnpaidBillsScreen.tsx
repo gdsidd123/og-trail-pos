@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, FlatList, TouchableOpacity } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { supabase } from '../services/supabaseClient';
+import { formatTableLabel } from '../utils/tableDisplay';
 
 type UnpaidBill = {
   id: string;
@@ -11,6 +12,7 @@ type UnpaidBill = {
   total?: number | null;
   billed_at?: string | null;
   created_at?: string | null;
+  table_name?: string | null;
 };
 
 export default function UnpaidBillsScreen() {
@@ -29,7 +31,14 @@ export default function UnpaidBillsScreen() {
         .eq('status', 'billed')
         .order('billed_at', { ascending: false });
       if (fetchError) throw fetchError;
-      setBills((data || []) as UnpaidBill[]);
+      const billRows = (data || []) as UnpaidBill[];
+      const tableIds = billRows.map((bill) => bill.table_id);
+      let tableNameById: Record<string, string> = {};
+      if (tableIds.length > 0) {
+        const { data: tableRows } = await supabase.from('tables').select('id, name').in('id', tableIds);
+        tableNameById = Object.fromEntries(((tableRows || []) as { id: string | number; name: string }[]).map((table) => [String(table.id), table.name]));
+      }
+      setBills(billRows.map((bill) => ({ ...bill, table_name: tableNameById[String(bill.table_id)] || null })));
     } catch (err: any) {
       setError(err.message || String(err));
     } finally {
@@ -71,9 +80,9 @@ export default function UnpaidBillsScreen() {
           <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Billing', { orderId: item.id })}>
             <View style={styles.cardHeader}>
               <Text style={styles.customerName}>{item.customer_name || 'Unnamed customer'}</Text>
-              <Text style={styles.amount}>${Number(item.total || 0).toFixed(2)}</Text>
+              <Text style={styles.amount}>Rs. {Number(item.total || 0).toFixed(2)}</Text>
             </View>
-            <Text style={styles.meta}>Table {item.table_id}</Text>
+            <Text style={styles.meta}>{formatTableLabel(item.table_id, item.table_name)}</Text>
             <Text style={styles.meta}>{item.customer_phone || 'No phone added'}</Text>
             <Text style={styles.meta}>Order {item.id.slice(0, 8)}</Text>
           </TouchableOpacity>
@@ -98,3 +107,8 @@ const styles = StyleSheet.create({
   errorTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8 },
   errorText: { color: 'red', textAlign: 'center' },
 });
+
+
+
+
+
