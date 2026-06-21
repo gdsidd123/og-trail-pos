@@ -42,3 +42,8 @@ yarn-error.*
 /android
 
 supabase/.temp/
+
+# Local customer QR outputs with raw table tokens
+customer-qr-tokens.json
+outputs/customer-qr-codes.html
+
